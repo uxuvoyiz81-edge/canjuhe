@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EDGE // 聚合搜索</title>
+<style>
+:root{--bg:#05070a;--panel:#0a0e13;--line:#1b2733;--text:#e8edf2;--muted:#7d8b99;--cyan:#00e5ff;--green:#39ff88;--purple:#9b7cff;--red:#ff4d6d}
+*{box-sizing:border-box;margin:0;padding:0}
+body{min-height:100vh;background:radial-gradient(circle at 80% 0%,rgba(0,229,255,.07),transparent 28%),radial-gradient(circle at 10% 25%,rgba(155,124,255,.05),transparent 25%),var(--bg);color:var(--text);font:14px/1.7 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding-bottom:60px}
+body:before{content:"";position:fixed;inset:0;pointer-events:none;opacity:.15;background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);background-size:34px 34px}
+.wrap{width:min(820px,calc(100% - 28px));margin:auto;position:relative;z-index:1}
+header{padding:38px 0 20px;text-align:center}
+.brand{font:800 14px ui-monospace,monospace;letter-spacing:.14em;color:#b9c5cf}.brand span{color:var(--cyan)}
+h1{font-size:clamp(26px,5vw,40px);font-weight:850;letter-spacing:-.04em;margin:10px 0 6px}
+h1 span{color:var(--cyan)}
+.sub{color:var(--muted);font-size:12.5px}
+/* 搜索框 */
+.sbox{margin-top:24px;position:relative}
+.srow{display:flex;gap:8px}
+.srow input{flex:1;padding:14px 16px;border-radius:11px;border:1px solid var(--line);background:#080c11;color:var(--text);font-size:15px;outline:none}
+.srow input:focus{border-color:rgba(0,229,255,.55);box-shadow:0 0 22px rgba(0,229,255,.08)}
+.sbtn{padding:0 20px;border:0;border-radius:11px;background:var(--cyan);color:#001014;font-weight:900;font-size:13px}
+.sbtn:hover{filter:brightness(1.08)}
+/* 引擎选择 */
+.engines{display:flex;gap:7px;margin-top:12px;flex-wrap:wrap}
+.eng{padding:7px 13px;border:1px solid var(--line);border-radius:9px;background:#080c11;color:var(--muted);font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px}
+.eng:hover{border-color:#304250;color:var(--text)}
+.eng.active{color:var(--cyan);border-color:rgba(0,229,255,.5);background:rgba(0,229,255,.06)}
+.eng i{font-style:normal;font-size:14px}
+/* 模式提示 */
+.note{margin-top:11px;font:11px ui-monospace,monospace;color:#5d6b78;line-height:1.8}
+.note b{color:var(--cyan)}
+/* 结果 */
+.results{margin-top:22px;display:grid;gap:9px}
+.rcard{padding:14px 16px;border:1px solid var(--line);border-radius:11px;background:linear-gradient(145deg,rgba(13,18,25,.96),rgba(7,10,14,.96));text-decoration:none;display:block;transition:.18s}
+.rcard:hover{border-color:rgba(0,229,255,.35);transform:translateY(-1px)}
+.rcard .src{font:10px ui-monospace,monospace;color:var(--muted);margin-bottom:4px}
+.rcard h3{font-size:15px;color:var(--cyan);margin-bottom:4px;font-weight:700}
+.rcard p{font-size:12.5px;color:#96a5b1;line-height:1.6}
+.empty{padding:30px;text-align:center;color:#5d6b78;font:12px ui-monospace,monospace;border:1px dashed var(--line);border-radius:11px}
+/* ===== 加载动画 ===== */
+.loading{padding:34px 20px;text-align:center;border:1px solid rgba(0,229,255,.22);border-radius:13px;background:linear-gradient(145deg,rgba(0,229,255,.05),rgba(7,10,14,.9))}
+.ld-ring{width:46px;height:46px;margin:0 auto 14px;position:relative}
+.ld-ring i{position:absolute;inset:0;border:2px solid transparent;border-top-color:var(--cyan);border-right-color:rgba(0,229,255,.35);border-radius:50%;animation:ldspin .8s linear infinite}
+.ld-ring i:nth-child(2){inset:7px;border-top-color:transparent;border-bottom-color:var(--green);animation:ldspin 1.1s linear infinite reverse;opacity:.75}
+.ld-ring i:nth-child(3){inset:14px;border-top-color:transparent;border-bottom-color:transparent;border-left-color:var(--purple);animation:ldspin .65s linear infinite}
+@keyframes ldspin{to{transform:rotate(360deg)}}
+.ld-txt{font:12px ui-monospace,monospace;color:var(--cyan);letter-spacing:.06em}
+.ld-txt:after{content:"";animation:lddots 1.2s steps(4,end) infinite}
+@keyframes lddots{0%{content:""}25%{content:"."}50%{content:".."}75%{content:"..."}100%{content:""}}
+.ld-sub{margin-top:7px;font:10px ui-monospace,monospace;color:#5d6b78}
+.ld-bar{margin:14px auto 0;width:min(260px,80%);height:2px;border-radius:2px;background:#111a22;overflow:hidden}
+.ld-bar i{display:block;height:100%;width:38%;border-radius:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);animation:ldslide 1.15s ease-in-out infinite}
+@keyframes ldslide{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}
+/* 骨架屏 */
+.sk{display:grid;gap:9px;margin-top:4px}
+.sk-row{padding:14px 16px;border:1px solid var(--line);border-radius:11px;background:#0a0e13}
+.sk-row i{display:block;height:11px;border-radius:5px;background:linear-gradient(90deg,#121a22 25%,#1b2530 37%,#121a22 63%);background-size:400% 100%;animation:skShine 1.3s ease-in-out infinite}
+.sk-row i:nth-child(1){width:22%;margin-bottom:9px;height:8px}
+.sk-row i:nth-child(2){width:62%;margin-bottom:8px;height:14px}
+.sk-row i:nth-child(3){width:90%}
+@keyframes skShine{0%{background-position:100% 0}100%{background-position:0 0}}
+/* 按钮加载态 */
+.sbtn.loading{pointer-events:none;opacity:.75;display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.sbtn.loading:after{content:"";width:12px;height:12px;border:2px solid rgba(0,20,26,.3);border-top-color:#001014;border-radius:50%;animation:ldspin .7s linear infinite}
+/* API 配置面板 */
+.cfg{margin-top:16px;border:1px solid var(--line);border-radius:11px;background:#080c11;overflow:hidden}
+.cfg summary{padding:12px 16px;cursor:pointer;font:11px ui-monospace,monospace;color:var(--purple);list-style:none}
+.cfg summary::-webkit-details-marker{display:none}
+.cfg summary:before{content:"▸ ";color:var(--cyan)}
+.cfg[open] summary:before{content:"▾ "}
+.cfg .body{padding:0 16px 16px;border-top:1px solid var(--line)}
+.cfg label{display:block;font-size:11px;color:var(--muted);margin-top:11px}
+.cfg input{width:100%;margin-top:5px;padding:9px 11px;border-radius:8px;border:1px solid var(--line);background:#05080c;color:var(--text);font:11px ui-monospace,monospace;outline:none}
+.cfg input:focus{border-color:rgba(0,229,255,.5)}
+.cfg .save{margin-top:12px;padding:9px 16px;border:1px solid rgba(0,229,255,.4);border-radius:8px;background:transparent;color:var(--cyan);font-weight:800;font-size:11px}
+.cfg .help{margin-top:11px;font-size:11px;color:#5d6b78;line-height:1.8}
+.cfg .help code{color:var(--green)}
+
+/* ===== SSO 登录 / 用户条 / 历史 ===== */
+.userbar{display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:14px;font:11px ui-monospace,monospace}
+.userbar .who{display:flex;align-items:center;gap:7px;padding:6px 11px;border:1px solid rgba(57,255,136,.3);background:rgba(57,255,136,.05);border-radius:9px;color:var(--green)}
+.userbar .who b{color:var(--text);font-weight:700}
+.userbar .out{padding:6px 11px;border:1px solid var(--line);background:#080c11;color:var(--muted);border-radius:9px}
+.userbar .out:hover{color:var(--red);border-color:rgba(255,77,109,.4)}
+#ssoMask{position:fixed;inset:0;background:rgba(2,4,8,.94);backdrop-filter:blur(10px);z-index:9998;display:none;align-items:center;justify-content:center;padding:20px}
+#ssoMask.open{display:flex}
+.sso-card{width:min(420px,100%);background:linear-gradient(145deg,rgba(13,18,25,.98),rgba(7,10,14,.98));border:1px solid var(--line);border-radius:16px;padding:26px;text-align:center;box-shadow:0 0 50px rgba(0,229,255,.08)}
+.sso-ico{width:56px;height:56px;margin:0 auto 14px;border-radius:14px;display:grid;place-items:center;font-size:26px;background:linear-gradient(135deg,#091b22,#11101f);border:1px solid rgba(0,229,255,.35)}
+.sso-card h2{font-size:19px;font-weight:850;letter-spacing:-.03em;margin-bottom:7px}
+.sso-card p{color:var(--muted);font-size:12px;line-height:1.8}
+.sso-btn{width:100%;padding:13px;border:0;border-radius:11px;background:var(--cyan);color:#001014;font-weight:900;font-size:14px;margin-top:18px}
+.sso-btn:hover{filter:brightness(1.08)}
+.sso-note{margin-top:14px;font:10px ui-monospace,monospace;color:#5d6b78;line-height:1.8}
+.sso-perm{margin-top:16px;display:grid;gap:7px;text-align:left}
+.sso-perm div{display:flex;gap:8px;align-items:flex-start;font-size:11.5px;color:#96a5b1;padding:9px 11px;border:1px solid #1b2733;background:#070b10;border-radius:9px}
+.sso-perm i{font-style:normal;color:var(--green);flex:none}
+.hist{margin-top:16px;border:1px solid var(--line);border-radius:11px;background:#080c11;overflow:hidden}
+.hist .hd{padding:11px 15px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);font:11px ui-monospace,monospace;color:var(--muted)}
+.hist .hd b{color:var(--cyan)}
+.hist .hd button{border:1px solid var(--line);background:transparent;color:var(--muted);padding:4px 9px;border-radius:7px;font-size:10px}
+.hist .hd button:hover{color:var(--red);border-color:rgba(255,77,109,.4)}
+.hist .bd{padding:9px 11px;display:flex;gap:7px;flex-wrap:wrap;min-height:44px;align-items:center}
+.hchip{padding:5px 11px;border:1px solid #26333e;background:#0b1117;border-radius:20px;font-size:11.5px;color:#a9b4bf;display:inline-flex;align-items:center;gap:6px}
+.hchip:hover{border-color:var(--cyan);color:var(--cyan)}
+.hchip em{font-style:normal;color:#5d6b78;font-size:9.5px}
+.hempty{color:#5d6b78;font:11px ui-monospace,monospace;padding:6px 4px}
+.sync{font:10px ui-monospace,monospace;color:#5d6b78;margin-top:7px;text-align:right}
+.sync.ok{color:var(--green)} .sync.err{color:#ff8096}
+
+footer{margin-top:34px;padding-top:16px;border-top:1px solid var(--line);text-align:center;color:#53616d;font:11px ui-monospace,monospace}
+.toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-10px);opacity:0;pointer-events:none;z-index:9999;padding:8px 13px;border:1px solid var(--line);border-radius:8px;background:#0b1117;color:var(--cyan);font:12px ui-monospace,monospace;transition:.25s}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+@media(max-width:700px){.srow{flex-direction:column}.sbtn{padding:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="userbar" id="userbar"></div>
+<div class="brand">EDGE <span>//</span> SEARCH</div>
+  <h1>聚合<span>搜索</span></h1>
+  <p class="sub">Google · Bing · DuckDuckGo · 站内 —— 一处输入，多引擎直达</p>
+  <p class="sub" style="margin-top:5px;font-size:11.5px"><b style="color:var(--green)">填 Tavily Key</b> 后直接在本页出结果，不用跳转（Serper 备选）</p>
+  <p class="sub" style="margin-top:8px"><a href="https://eclk0963.ccwu.cc/" style="color:var(--cyan);text-decoration:none">← 返回 EDGE 主站</a></p>
+</header>
+
+<div class="sbox">
+  <div class="srow">
+    <input id="q" placeholder="输入关键词，回车搜索…" autocomplete="off">
+    <button class="sbtn" onclick="doSearch()">搜索</button>
+  </div>
+  <div class="engines" id="engines">
+    <button class="eng active" data-e="google"><i>🔍</i>Google</button>
+    <button class="eng" data-e="bing"><i>🪟</i>Bing</button>
+    <button class="eng" data-e="duck"><i>🦆</i>DuckDuckGo</button>
+    <button class="eng" data-e="site"><i>🏠</i>站内</button>
+  </div>
+  <div class="note" id="note"></div>
+</div>
+
+<div class="hist" id="histBox">
+<div class="hd"><span>🕘 搜索历史 · <b id="histCount">0</b> 条</span><button onclick="clearHistory()">清空</button></div>
+<div class="bd" id="histBody"><span class="hempty">暂无记录</span></div>
+</div>
+<div class="sync" id="syncTip"></div>
+
+<details class="cfg">
+  <summary>⚙ 高级：接入真实搜索 API（填了才能在本页直接看结果）</summary>
+  <div class="body">
+    <label>🔰 Tavily API Key（<b style="color:var(--green)">主力</b> · 注册送约 1000 次/月 · 填它就能在本页出结果）</label>
+    <input id="tavilyKey" placeholder="粘贴 tavily.com 的 API Key（tvly-…）">
+    <div class="help" style="margin:-4px 0 12px;padding:9px 11px">
+      没 Key？去 <a href="https://tavily.com" target="_blank" rel="noopener" style="color:var(--cyan)">tavily.com</a> 用邮箱注册，<b style="color:var(--green)">免费档每月约 1000 次</b>，不用信用卡。
+      注册后在 Dashboard 复制 Key 粘到上面即可。<br>
+      <b>主力是 Tavily</b>：填了它，Google 引擎走 Tavily。
+    </div>
+    <label>Serper API Key（<b style="color:#8b98a5">备选</b> · 注册送 2500 次 · Tavily 没填时才用它）</label>
+    <input id="serperKey" placeholder="粘贴 serper.dev 的 API Key">
+    <div class="help" style="margin:-4px 0 12px;padding:9px 11px">
+      备选源。去 <a href="https://serper.dev" target="_blank" rel="noopener" style="color:var(--cyan)">serper.dev</a> 注册，<b style="color:var(--green)">免费送约 2500 次</b>，不用信用卡。
+      只有 Tavily 留空时才会用到它。
+    </div>
+    <label>Bing Search API Key（Azure · 每月 1000 次免费）</label>
+    <input id="bingKey" placeholder="粘贴你的 Bing Subscription Key">
+    <label>Google CSE：搜索引擎 ID（cx）</label>
+    <input id="gCx" placeholder="例如 017576662512468239146:omuauf_lfve">
+    <label>Google CSE：API Key</label>
+    <input id="gKey" placeholder="AIza…">
+    <button class="save" onclick="saveCfg()">💾 保存到本机</button>
+    <div class="help">
+      不填也能用：默认走<b style="color:var(--cyan)">跳转模式</b>，点搜索直接打开对应引擎的结果页。<br>
+      填了之后：Google 与 Bing 会在本页直接返回真实结果列表。<br>
+      免费额度：<code>Tavily 约 1000 次/月（主力）</code> · <code>Serper 约 2500 次（备选）</code> · <code>Bing 1000 次/月</code> · <code>Google CSE 100 次/天</code>。<br>
+      优先级：Google 引擎填了 <b>Tavily</b> 就走 Tavily，其次 Serper，最后才是 CSE。<br>
+      密钥只存本机浏览器，不会上传到任何服务器。
+    </div>
+  </div>
+</details>
+
+<div class="results" id="results"></div>
+
+<footer>EDGE // 聚合搜索 · 密钥仅存本地 · 无追踪</footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+/* ---------- 引擎配置 ---------- */
+var ENGINES = {
+  google:{name:'Google',url:function(q){return 'https://www.google.com/search?q='+encodeURIComponent(q)}},
+  bing:  {name:'Bing',  url:function(q){return 'https://www.bing.com/search?q='+encodeURIComponent(q)}},
+  duck:  {name:'DuckDuckGo',url:function(q){return 'https://duckduckgo.com/?q='+encodeURIComponent(q)}},
+  site:  {name:'站内',url:null}
+};
+var cur = 'google';
+
+/* 站内索引：游戏 + 页面区块，可自行增删 */
+var SITE_INDEX = [
+  {t:'🐍 贪吃蛇',d:'经典贪吃蛇，方向键控制，吃豆成长',k:'snake 贪吃蛇 游戏',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'🔢 2048',d:'数字合并益智游戏',k:'2048 数字 合并',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'🧱 打砖块',d:'弹球打砖块',k:'break 打砖块 弹球',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'🔫 枪战',d:'射击小游戏',k:'gun 枪战 射击',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'🟦 俄罗斯方块',d:'经典俄罗斯方块',k:'tetris 俄罗斯方块 方块',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'💣 扫雷',d:'经典扫雷',k:'mine 扫雷',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'🧠 记忆翻牌',d:'翻牌配对记忆挑战',k:'memory 记忆 翻牌',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'⚡ 反应测试',d:'测试反应速度',k:'reflex 反应 速度',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'🎯 见缝插针',d:'插针小游戏',k:'pin 插针',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'🐦 飞跃管道',d:'Flappy 类飞行游戏',k:'flappy 飞行 管道',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'💥 打地鼠',d:'经典打地鼠',k:'mole 打地鼠',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'🎁 道具商店',d:'用积分兑换游戏道具',k:'shop 商城 道具 积分',u:'https://eclk0963.ccwu.cc/#shop'},
+  {t:'🏆 游戏排行榜',d:'TOP 10 云端最好成绩',k:'rank 排行榜 成绩',u:'https://eclk0963.ccwu.cc/#games'},
+  {t:'📖 积分文章',d:'积分解锁的深度文章',k:'article 文章 付费',u:'https://eclk0963.ccwu.cc/#paidArticles'},
+  {t:'👑 会员中心',d:'Go / Plus 会员权益与激活码',k:'member 会员 plus go 激活码',u:'https://eclk0963.ccwu.cc/#membership'},
+  {t:'💬 留言墙',d:'给站长捎句话',k:'guestbook 留言 联系',u:'https://eclk0963.ccwu.cc/#messages'},
+  {t:'🛠 开发者空间',d:'开发者面板与技术栈',k:'dev 开发者 技术',u:'https://eclk0963.ccwu.cc/'}
+];
+
+/* ---------- 交互 ---------- */
+document.getElementById('engines').addEventListener('click',function(e){
+  var b = e.target.closest('.eng'); if(!b) return;
+  document.querySelectorAll('.eng').forEach(function(x){x.classList.remove('active')});
+  b.classList.add('active');
+  cur = b.getAttribute('data-e');
+  updNote();
+});
+document.getElementById('q').addEventListener('keydown',function(e){ if(e.key==='Enter') doSearch(); });
+
+function toast(m){var t=document.getElementById('toast');t.textContent=m;t.classList.add('show');setTimeout(function(){t.classList.remove('show')},1800)}
+
+function updNote(){
+  var n = document.getElementById('note');
+  var cfg = getCfg();
+  if(cur==='site'){ n.innerHTML='<b>站内模式</b>：直接检索本站游戏与页面，无需联网与密钥'; return; }
+  var hasKey = (cur==='bing'&&cfg.bingKey) || (cur==='google'&&(cfg.tavilyKey||cfg.serperKey||(cfg.gKey&&cfg.gCx)));
+  if(hasKey){
+    var via = (cur==='google'&&cfg.tavilyKey) ? 'Tavily'
+            : (cur==='google'&&cfg.serperKey) ? 'Serper'
+            : (cur==='google' ? 'Google CSE' : 'Bing');
+    n.innerHTML = '<b>API 模式</b>：结果将直接显示在本页（走 '+via+'）';
+    return;
+  }
+  n.innerHTML = '<b>跳转模式</b>：将打开 '+ENGINES[cur].name+' 结果页（官方不允许被 iframe 嵌套，这是唯一稳定方式）'
+    + (cur==='google' ? '　·　<a href="#" onclick="openCfg();return false" style="color:var(--green);text-decoration:none">填 Tavily Key 可本页直出</a>' : '');
+}
+
+function openCfg(){
+  try{
+    var d = document.querySelector('details.cfg');
+    if(d){ d.open = true; d.scrollIntoView({behavior:'smooth',block:'center'});
+      setTimeout(function(){ var e=document.getElementById('tavilyKey')||document.getElementById('serperKey'); if(e)e.focus() },420); }
+  }catch(e){}
+}
+function getCfg(){
+  try{return JSON.parse(localStorage.getItem('edgeSearchCfg')||'{}')}catch(e){return {}}
+}
+function saveCfg(){
+  var el_t = document.getElementById('tavilyKey');
+  var c = {
+    tavilyKey:(el_t?el_t.value:'').trim(),
+    serperKey:document.getElementById('serperKey').value.trim(),
+    bingKey:document.getElementById('bingKey').value.trim(),
+    gCx:document.getElementById('gCx').value.trim(),
+    gKey:document.getElementById('gKey').value.trim()
+  };
+  localStorage.setItem('edgeSearchCfg',JSON.stringify(c));
+  toast('✓ 已保存到本机');
+  updNote();
+}
+(function initCfg(){
+  var c = getCfg();
+  var el_t2 = document.getElementById('tavilyKey');
+  if(el_t2) el_t2.value = c.tavilyKey||'';
+  document.getElementById('serperKey').value = c.serperKey||'';
+  document.getElementById('bingKey').value = c.bingKey||'';
+  document.getElementById('gCx').value = c.gCx||'';
+  document.getElementById('gKey').value = c.gKey||'';
+  updNote();
+})();
+
+
+/* ================= EDGE SSO 授权登录 ================= */
+var SSO_SECRET="EDGE_SSO_2026_SHARED_SECRET_V1";
+/* 主站授权页地址：主站换域名时改这一行即可 */
+var AUTH_URL="https://eclk0963.ccwu.cc/authorize.html";
+var CLIENT_ID="edge_search";
+var SUPABASE_URL="https://djlkkguzlloswnzeejhm.supabase.co";
+var SUPABASE_ANON_KEY="sb_publishable_yFWKmbGx--8mHfcmsgJNlQ_Oyp5ygl9";
+var ssoUser=null;
+
+function ssoGet(k){try{return localStorage.getItem(k)}catch(e){return null}}
+function ssoSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+function ssoDel(k){try{localStorage.removeItem(k)}catch(e){}}
+
+async function ssoHmac(msg){
+  var key=await crypto.subtle.importKey('raw',new TextEncoder().encode(SSO_SECRET),{name:'HMAC',hash:'SHA-256'},false,['sign']);
+  var sig=await crypto.subtle.sign('HMAC',key,new TextEncoder().encode(msg));
+  return btoa(String.fromCharCode.apply(null,new Uint8Array(sig))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function b64urlDec(x){
+  x=x.replace(/-/g,'+').replace(/_/g,'/');
+  while(x.length%4)x+='=';
+  return decodeURIComponent(escape(atob(x)));
+}
+async function ssoVerify(ticket){
+  if(!ticket) return null;
+  var parts=String(ticket).split('.');
+  if(parts.length!==2) return null;
+  var body=parts[0], sig=parts[1];
+  var want=await ssoHmac(body);
+  if(want!==sig) return null;
+  var p;
+  try{p=JSON.parse(b64urlDec(body))}catch(e){return null}
+  var now=Math.floor(Date.now()/1000);
+  if(!p||!p.uid||!p.exp||p.exp<now) return null;
+  if(p.client&&p.client!==CLIENT_ID) return null;
+  return p;
+}
+function startSSO(){
+  var back=location.origin+location.pathname;
+  location.href=AUTH_URL+'?client_id='+encodeURIComponent(CLIENT_ID)
+    +'&redirect_uri='+encodeURIComponent(back)
+    +'&state='+encodeURIComponent(String(Date.now()));
+}
+function ssoLogout(){
+  ssoDel('edge_sso_user'); ssoDel('edge_search_hist');
+  ssoUser=null; renderUserBar(); renderHistory();
+  /* 同时登出本站的 Supabase 会话 */
+  try{ var sb=getSb(); if(sb && sb.auth && sb.auth.signOut) sb.auth.signOut() }catch(e){}
+  document.getElementById('ssoMask').classList.add('open');
+  toast('已退出 EDGE 授权');
+}
+/* ================= 邮箱验证码登录（与主站同一 Supabase 项目） =================
+   为什么加这个：原本只支持「跳主站授权」一条路，
+   这里补一个本站直达的邮箱验证码登录，账号与主站完全互通。
+   Supabase 后台开了验证码防护，signInWithOtp 不带 captchaToken
+   会被直接拒（no captcha_token found），所以发送前先拿一次性 token。
+   Site Key 是公开值，可写在前端；Secret Key 只在 Supabase 后台。
+   ========================================================================== */
+var HCAP_SITE_KEY = '637ec268-2ad6-49e0-8118-8b0050ccd638';
+
+var _hcapLoad = null;
+function hcapLoadScript(){
+  if(window.hcaptcha) return Promise.resolve(true);
+  if(_hcapLoad) return _hcapLoad;
+  _hcapLoad = new Promise(function(resolve){
+    var sc = document.createElement('script');
+    sc.src = 'https://js.hcaptcha.com/1/api.js?render=explicit';
+    sc.async = true;
+    sc.onload = function(){ resolve(true) };
+    sc.onerror = function(){ _hcapLoad = null; resolve(false) };
+    document.head.appendChild(sc);
+  });
+  return _hcapLoad;
+}
+async function hcapEnsure(){
+  if(window.hcaptcha && window.hcaptcha.render) return true;
+  var ok = await hcapLoadScript();
+  if(!ok) return false;
+  for(var i=0;i<40;i++){
+    if(window.hcaptcha && window.hcaptcha.render) return true;
+    await new Promise(function(r){ setTimeout(r,150) });
+  }
+  return !!(window.hcaptcha && window.hcaptcha.render);
+}
+/* 一次性 token：用完即弃，不做缓存复用 */
+function hcapGetToken(){
+  return new Promise(function(resolve){
+    var slot = document.getElementById('hcapSlot');
+    var tip  = document.getElementById('hcapTip');
+    if(!slot || !window.hcaptcha || !window.hcaptcha.render){ resolve(''); return }
+    var done=false;
+    function fin(t){
+      if(done) return; done=true;
+      try{ slot.innerHTML='' }catch(e){}
+      resolve(t||'');
+    }
+    try{
+      window.hcaptcha.render(slot, {
+        sitekey: HCAP_SITE_KEY,
+        theme: 'dark',
+        callback:            function(t){ fin(t) },
+        'error-callback':    function(){ fin('') },
+        'close-callback':    function(){ fin('') },
+        'expired-callback':  function(){ fin('') },
+        'chalexpired-callback': function(){ fin('') }
+      });
+    }catch(e){ fin(''); return }
+    if(tip){ tip.style.display='block'; tip.textContent='请完成上方的人机验证，通过后立即发送验证码。' }
+    setTimeout(function(){ if(!done) fin('') }, 90000);
+  });
+}
+
+/* 站点直达登录：邮箱 + 验证码 */
+function searchToggleLogin(){
+  var box = document.getElementById('ssoLoginBox');
+  var btn = document.getElementById('ssoLoginToggle');
+  if(!box) return;
+  var open = box.style.display === 'none' || !box.style.display;
+  box.style.display = open ? 'block' : 'none';
+  if(btn) btn.textContent = open ? '收起邮箱登录' : '或用邮箱验证码登录';
+  if(open){ setTimeout(function(){ var e=document.getElementById('ssoEmail'); if(e)e.focus() },120) }
+}
+async function sendSearchOtp(again){
+  var v = String((document.getElementById('ssoEmail')||{}).value||'').trim().toLowerCase();
+  if(!v || v.indexOf('@')<0 || v.indexOf('.')<0){ toast('请输入有效邮箱'); var e=document.getElementById('ssoEmail'); if(e)e.focus(); return }
+  var sb = getSb(); if(!sb){ toast('数据库未连接'); return }
+
+  var captchaToken = '';
+  var ready = false;
+  try{ ready = await hcapEnsure() }catch(e){ ready = false }
+  if(ready){
+    try{ captchaToken = await hcapGetToken() }catch(e){ captchaToken = '' }
+    var tip = document.getElementById('hcapTip');
+    if(!captchaToken){
+      if(tip){ tip.style.display='block'; tip.textContent='未完成人机验证，验证码没有发送。' }
+      toast('请先完成人机验证');
+      return;
+    }
+    if(tip){ tip.style.display='none'; tip.textContent='' }
+  }
+  /* ready=false：hCaptcha 脚本加载不出（网络被墙）→ 放行直发，让用户看到真实报错 */
+
+  toast(again ? '重新发送中…' : '发送中…');
+  try{
+    /* 只用邮箱安全码，不再发/依赖登录链接（去掉 emailRedirectTo） */
+    var r = await sb.auth.signInWithOtp({
+      email: v,
+      options:{
+        shouldCreateUser: true,
+        captchaToken: captchaToken
+      }
+    });
+    if(r && r.error) throw r.error;
+    document.getElementById('ssoStep1').style.display = 'none';
+    document.getElementById('ssoStep2').style.display = 'block';
+    document.getElementById('ssoTo').textContent = v;
+    var o = document.getElementById('ssoOtp'); if(o){ o.value=''; setTimeout(function(){o.focus()},180) }
+    toast('✓ 安全码已发送');
+  }catch(err){
+    var msg = String((err && err.message) || err || '');
+    if(/captcha/i.test(msg)) msg = '人机验证未通过（' + msg + '）。请确认 hCaptcha 后台已把本站域名加入白名单。';
+    toast('发送失败：' + msg);
+  }
+}
+async function verifySearchOtp(){
+  var v = String((document.getElementById('ssoEmail')||{}).value||'').trim().toLowerCase();
+  var code = String((document.getElementById('ssoOtp')||{}).value||'').replace(/\D/g,'').trim();
+  var sb = getSb(); if(!sb){ toast('数据库未连接'); return }
+  if(code.length !== 6){ toast('请输入 6 位安全码'); return }
+  toast('验证中…');
+  try{
+    var r = await sb.auth.verifyOtp({ email: v, token: code, type: 'email' });
+    if(r && r.error) throw r.error;
+    var st = (r && r.data && r.data.session) ? r.data.session : null;
+    var u  = (r && r.data && r.data.user) ? r.data.user : (st ? st.user : null);
+    if(!u){ toast('验证成功但未取到用户信息'); return }
+    ssoUser = { uid: u.id, email: u.email, exp: st ? st.expires_at : (Math.floor(Date.now()/1000)+86400*7) };
+    ssoSet('edge_sso_user', JSON.stringify(ssoUser));
+    renderUserBar(); renderHistory();
+    var mk = document.getElementById('ssoMask'); if(mk) mk.classList.remove('open');
+    toast('✓ 登录成功 · ' + u.email);
+    try{ pullCloudHist() }catch(e){}
+  }catch(err){
+    var msg = String((err && err.message) || err || '');
+    if(/expired|invalid/i.test(msg)) msg = '验证码错误或已过期，请重新发送。';
+    toast('验证失败：' + msg);
+  }
+}
+function searchBackToEmail(){
+  var a=document.getElementById('ssoStep1'), b=document.getElementById('ssoStep2');
+  if(a)a.style.display='block'; if(b)b.style.display='none';
+  var e=document.getElementById('ssoEmail'); if(e)e.focus();
+}
+
+function renderUserBar(){
+  var box=document.getElementById('userbar'); if(!box)return;
+  if(!ssoUser){ box.innerHTML=''; return; }
+  box.innerHTML='<span class="who">● <b>'+esc(ssoUser.email)+'</b></span>'
+   +'<button class="out" onclick="ssoLogout()">退出</button>';
+}
+
+/* ================= 搜索历史（本地 + 云端） ================= */
+var HIST_KEY='edge_search_hist';
+var sbClient=null;
+function getSb(){
+  if(sbClient) return sbClient;
+  if(window.supabase&&window.supabase.createClient){
+    sbClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+  }
+  return sbClient;
+}
+function localHist(){
+  try{return JSON.parse(ssoGet(HIST_KEY)||'[]')}catch(e){return []}
+}
+function pushLocal(q,engine){
+  var h=localHist().filter(function(x){return x.q!==q});
+  h.unshift({q:q,e:engine||cur,t:Date.now()});
+  ssoSet(HIST_KEY,JSON.stringify(h.slice(0,50)));
+  renderHistory();
+}
+function renderHistory(){
+  var body=document.getElementById('histBody');
+  var cnt=document.getElementById('histCount');
+  if(!body)return;
+  var h=localHist();
+  if(cnt)cnt.textContent=h.length;
+  if(!h.length){body.innerHTML='<span class="hempty">暂无记录</span>';return}
+  body.innerHTML=h.slice(0,20).map(function(x){
+    var d=new Date(x.t), p=function(n){return n<10?'0'+n:''+n};
+    var ts=(d.getMonth()+1)+'/'+d.getDate()+' '+p(d.getHours())+':'+p(d.getMinutes());
+    return '<span class="hchip" onclick="rerun('+JSON.stringify(x.q).replace(/"/g,'&quot;')+')">🔍 '+esc(x.q)+' <em>'+esc(x.e||'')+' · '+ts+'</em></span>';
+  }).join('');
+}
+function rerun(q){
+  var el=document.getElementById('q'); if(el)el.value=q;
+  doSearch();
+}
+function clearHistory(){
+  if(!confirm('确定清空全部搜索历史？云端记录也会一并删除。'))return;
+  ssoSet(HIST_KEY,'[]'); renderHistory();
+  if(ssoUser&&ssoUser.uid){
+    var sb=getSb();
+    if(sb){ try{ sb.from('edge_search_history').delete().eq('user_id',ssoUser.uid) }catch(e){} }
+  }
+  toast('✓ 历史已清空');
+}
+function syncTip(msg,cls){
+  var t=document.getElementById('syncTip'); if(!t)return;
+  t.className='sync '+(cls||''); t.textContent=msg||'';
+}
+async function recordHistory(q){
+  if(!q)return;
+  pushLocal(q,cur);
+  if(!ssoUser||!ssoUser.uid)return;
+  var sb=getSb(); if(!sb)return;
+  syncTip('☁ 同步中…','');
+  try{
+    var r=await sb.from('edge_search_history').insert({
+      user_id:ssoUser.uid, email:ssoUser.email, keyword:q, engine:cur||'google'
+    });
+    if(r.error)throw r.error;
+    syncTip('☁ 已同步到云端','ok');
+  }catch(e){
+    syncTip('☁ 云端同步失败（已存本机）','err');
+  }
+}
+async function pullCloudHist(){
+  if(!ssoUser||!ssoUser.uid)return;
+  var sb=getSb(); if(!sb){syncTip('☁ 云端组件未加载','err');return}
+  try{
+    var r=await sb.from('edge_search_history')
+      .select('keyword,engine,created_at')
+      .eq('user_id',ssoUser.uid)
+      .order('created_at',{ascending:false})
+      .limit(50);
+    if(r.error)throw r.error;
+    var data=r.data||[];
+    if(!data.length){syncTip('☁ 云端暂无记录','ok');return}
+    var merged=[],seen={};
+    data.forEach(function(x){
+      if(seen[x.keyword])return; seen[x.keyword]=1;
+      merged.push({q:x.keyword,e:x.engine,t:new Date(x.created_at).getTime()});
+    });
+    localHist().forEach(function(x){
+      if(seen[x.q])return; seen[x.q]=1; merged.push(x);
+    });
+    merged.sort(function(a,b){return b.t-a.t});
+    ssoSet(HIST_KEY,JSON.stringify(merged.slice(0,50)));
+    renderHistory();
+    syncTip('☁ 已同步 '+data.length+' 条云端记录','ok');
+  }catch(e){
+    syncTip('☁ 云端读取失败：'+((e&&e.message)||e),'err');
+  }
+}
+
+/* ================= 启动：校验授权票据 ================= */
+(async function ssoInit(){
+  renderUserBar(); renderHistory();
+  var m=/[?&]edge_ticket=([^&#]*)/.exec(location.search);
+  if(new RegExp('[?&]denied=1').test(location.search)) toast('已取消授权');
+  if(m){
+    var p=await ssoVerify(decodeURIComponent(m[1]));
+    if(p){
+      ssoUser={uid:p.uid,email:p.email,exp:p.exp};
+      ssoSet('edge_sso_user',JSON.stringify(ssoUser));
+      try{history.replaceState({},'',location.pathname)}catch(e){}
+      toast('✓ EDGE 授权登录成功');
+    }else{ toast('授权票据无效或已过期') }
+  }else{
+    var raw=ssoGet('edge_sso_user');
+    if(raw){
+      try{
+        var u=JSON.parse(raw);
+        if(u&&u.uid&&u.exp&&u.exp>Math.floor(Date.now()/1000)) ssoUser=u;
+        else ssoDel('edge_sso_user');
+      }catch(e){ ssoDel('edge_sso_user') }
+    }
+    /* 邮箱验证码登录过的用户：刷新后用 Supabase 会话自动恢复，不必重登 */
+    if(!ssoUser){
+      try{
+        var sb0=getSb();
+        if(sb0 && sb0.auth && sb0.auth.getSession){
+          var r0=await sb0.auth.getSession();
+          var sess0=(r0&&r0.data)?r0.data.session:null;
+          var usr0=sess0?sess0.user:null;
+          if(usr0&&usr0.email){
+            ssoUser={uid:usr0.id,email:usr0.email,
+                     exp:sess0.expires_at||(Math.floor(Date.now()/1000)+86400*7)};
+            ssoSet('edge_sso_user',JSON.stringify(ssoUser));
+          }
+        }
+      }catch(e){}
+    }
+  }
+  renderUserBar();
+  if(!ssoUser){
+    document.getElementById('ssoMask').classList.add('open');
+    syncTip('未登录 · 历史仅存本机','');
+  }else{ pullCloudHist() }
+})();
+
+/* ---------- 搜索 ---------- */
+
+/* ---------- 加载动画控制 ---------- */
+function ldHtml(txt,sub){
+  return '<div class="loading">'
+    +'<div class="ld-ring"><i></i><i></i><i></i></div>'
+    +'<div class="ld-txt">'+esc(txt||'正在搜索')+'</div>'
+    +(sub?'<div class="ld-sub">'+esc(sub)+'</div>':'')
+    +'<div class="ld-bar"><i></i></div></div>';
+}
+function ldShow(txt,sub){
+  var box=document.getElementById('results');
+  if(box)box.innerHTML=ldHtml(txt,sub);
+  var b=document.querySelector('.sbtn'); if(b)b.classList.add('loading');
+}
+function ldHide(){
+  var b=document.querySelector('.sbtn'); if(b)b.classList.remove('loading');
+}
+function ldSkeleton(n){
+  var box=document.getElementById('results'); if(!box)return;
+  var s='';
+  for(var i=0;i<(n||4);i++)s+='<div class="sk-row"><i></i><i></i><i></i></div>';
+  box.innerHTML='<div class="sk">'+s+'</div>';
+}
+function doSearch(){
+  var q = document.getElementById('q').value.trim();
+  if(!q){ toast('先输入关键词'); return; }
+  try{ recordHistory(q) }catch(e){}
+  if(cur==='site') return searchSite(q);
+  var cfg = getCfg();
+  if(cur==='bing' && cfg.bingKey) return searchBing(q,cfg.bingKey);
+  if(cur==='google' && cfg.tavilyKey) return searchTavily(q,cfg.tavilyKey);   /* 主力 */
+  if(cur==='google' && cfg.serperKey) return searchSerper(q,cfg.serperKey);   /* 备选 */
+  if(cur==='google' && cfg.gKey && cfg.gCx) return searchGoogle(q,cfg.gKey,cfg.gCx);
+  /* 跳转模式 */
+  ldShow('正在打开 '+ENGINES[cur].name,'正在新标签页加载结果');
+  window.open(ENGINES[cur].url(q),'_blank','noopener');
+  toast('已打开 '+ENGINES[cur].name);
+  setTimeout(ldHide,1400);
+}
+
+function searchSite(q){
+  var box = document.getElementById('results');
+  ldShow('正在检索站内','扫描游戏 · 文章 · 商城 · 会员');
+  var ql = q.toLowerCase();
+  var hit = SITE_INDEX.filter(function(it){
+    return (it.t+' '+it.d+' '+it.k).toLowerCase().indexOf(ql)!==-1;
+  });
+  if(!hit.length){ setTimeout(function(){box.innerHTML='<div class="empty">站内没有匹配「'+esc(q)+'」的内容</div>';ldHide();},420); return; }
+  setTimeout(function(){
+    box.innerHTML = hit.map(function(it){
+      return '<a class="rcard" href="'+it.u+'"><div class="src">🏠 站内</div><h3>'+esc(it.t)+'</h3><p>'+esc(it.d)+'</p></a>';
+    }).join('');
+    ldHide();
+  },420);
+}
+
+/* Tavily（tavily.com）—— 线上主力搜索源，为 AI 检索而生
+   接口：POST https://api.tavily.com/search
+   鉴权：Authorization: Bearer <key>，Key 也同时放 body.api_key（两种都兼容）
+   Key 只存本机 localStorage，不上传任何服务器 */
+function searchTavily(q,key){
+  var box = document.getElementById('results');
+  ldShow('正在请求 Tavily','AI 检索 · tavily.com');
+  var ctl = (typeof AbortController==='function') ? new AbortController() : null;
+  var timer = ctl ? setTimeout(function(){ try{ctl.abort()}catch(e){} }, 20000) : null;
+  fetch('https://api.tavily.com/search',{
+    method:'POST',
+    signal: ctl ? ctl.signal : undefined,
+    headers:{
+      'Content-Type':'application/json',
+      'Authorization':'Bearer '+key
+    },
+    body: JSON.stringify({
+      api_key: key,
+      query: q,
+      max_results: 10,
+      search_depth: 'basic',
+      include_answer: false,
+      include_raw_content: false
+    })
+  }).then(function(r){
+    if(r.status===401||r.status===403)
+      throw new Error('Key 无效或已过期（HTTP '+r.status+'），去 tavily.com 检查额度');
+    if(r.status===429)
+      throw new Error('额度用完了（HTTP 429），Tavily 免费档每月约 1000 次');
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(d){
+    if(timer) clearTimeout(timer);
+    if(d && d.error) throw new Error(String(d.error).slice(0,120));
+    var list = (d && d.results) || [];
+    if(!list.length){ ldHide(); box.innerHTML='<div class="empty">Tavily 没有返回结果</div>'; return }
+    ldSkeleton(Math.min(5,list.length));
+    setTimeout(function(){
+      box.innerHTML = list.map(function(it){
+        return '<a class="rcard" href="'+esc(it.url)+'" target="_blank" rel="noopener">'
+          +'<div class="src">🔍 全网 <span style="opacity:.6">· via Tavily</span></div>'
+          +'<h3>'+esc(it.title||'')+'</h3><p>'+esc(it.content||'')+'</p></a>';
+      }).join('');
+      ldHide();
+    },260);
+  }).catch(function(e){
+    if(timer) clearTimeout(timer);
+    ldHide();
+    var m = String((e && e.message) || e || '');
+    if(/abort/i.test(m))
+      m = 'Tavily 请求超时（20 秒）。网络不通时可挂中转，或改用「跳转模式」。';
+    else if(/Failed to fetch|NetworkError|Load failed|CORS/i.test(m))
+      m = '连不上 Tavily（可能是网络不通或跨域被挡）。可挂中转，或改用「跳转模式」。';
+    box.innerHTML='<div class="empty">Tavily 请求失败：'+esc(m)+'</div>';
+  });
+}
+
+/* Serper（serper.dev）—— Google 结果的第三方 API，注册约送 2500 次免费
+   接口：POST https://google.serper.dev/search
+   鉴权：X-API-KEY 头
+   Key 只存本机 localStorage，不上传任何服务器 */
+function searchSerper(q,key){
+  var box = document.getElementById('results');
+  ldShow('正在请求 Serper','Google 结果 · serper.dev');
+  fetch('https://google.serper.dev/search',{
+    method:'POST',
+    headers:{ 'X-API-KEY':key, 'Content-Type':'application/json' },
+    body: JSON.stringify({ q:q, num:10 })
+  }).then(function(r){
+    if(r.status===401||r.status===403)
+      throw new Error('Key 无效或已过期（HTTP '+r.status+'），去 serper.dev 检查额度');
+    if(r.status===429)
+      throw new Error('额度用完了（HTTP 429），免费额度约 2500 次');
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(d){
+    if(d && d.message && !d.organic)
+      throw new Error(String(d.message).slice(0,120));
+    var list = (d && d.organic) || [];
+    if(!list.length){ ldHide(); box.innerHTML='<div class="empty">Serper 没有返回结果</div>'; return }
+    ldSkeleton(Math.min(5,list.length));
+    setTimeout(function(){
+      box.innerHTML = list.map(function(it){
+        return '<a class="rcard" href="'+esc(it.link)+'" target="_blank" rel="noopener">'
+          +'<div class="src">🔍 Google <span style="opacity:.6">· via Serper</span></div>'
+          +'<h3>'+esc(it.title)+'</h3><p>'+esc(it.snippet||'')+'</p></a>';
+      }).join('');
+      ldHide();
+    },260);
+  }).catch(function(e){
+    ldHide();
+    var m = String((e && e.message) || e || '');
+    if(/Failed to fetch|NetworkError|Load failed|CORS/i.test(m))
+      m = '连不上 Serper（可能是网络不通或跨域被挡）。可挂中转，或改用「跳转模式」直接打开 Google。';
+    box.innerHTML='<div class="empty">Serper 请求失败：'+esc(m)+'</div>';
+  });
+}
+
+function searchBing(q,key){
+  var box = document.getElementById('results');
+  ldShow('正在请求 Bing','连接 api.bing.microsoft.com');
+  fetch('https://api.bing.microsoft.com/v7.0/search?q='+encodeURIComponent(q)+'&count=10',{
+    headers:{'Ocp-Apim-Subscription-Key':key}
+  }).then(function(r){return r.json()})
+    .then(function(d){
+      var list=(d.webPages&&d.webPages.value)||[];
+      if(!list.length){ldHide();box.innerHTML='<div class="empty">Bing 没有返回结果</div>';return}
+      ldSkeleton(Math.min(5,list.length));
+      setTimeout(function(){
+        box.innerHTML=list.map(function(it){
+          return '<a class="rcard" href="'+esc(it.url)+'" target="_blank" rel="noopener"><div class="src">🪟 Bing</div><h3>'+esc(it.name)+'</h3><p>'+esc(it.snippet||'')+'</p></a>';
+        }).join('');
+        ldHide();
+      },260);
+    }).catch(function(e){
+      ldHide();
+      box.innerHTML='<div class="empty">Bing 请求失败：'+esc(e.message)+'<br>检查 Key 是否有效</div>';
+    });
+}
+
+function searchGoogle(q,key,cx){
+  var box = document.getElementById('results');
+  ldShow('正在请求 Google','连接 customsearch.googleapis.com');
+  fetch('https://www.googleapis.com/customsearch/v1?key='+encodeURIComponent(key)+'&cx='+encodeURIComponent(cx)+'&q='+encodeURIComponent(q))
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(d.error){throw new Error(d.error.message||'API 错误')}
+      var list=d.items||[];
+      if(!list.length){ldHide();box.innerHTML='<div class="empty">Google 没有返回结果</div>';return}
+      ldSkeleton(Math.min(5,list.length));
+      setTimeout(function(){
+        box.innerHTML=list.map(function(it){
+          return '<a class="rcard" href="'+esc(it.link)+'" target="_blank" rel="noopener"><div class="src">🔍 Google</div><h3>'+esc(it.title)+'</h3><p>'+esc(it.snippet||'')+'</p></a>';
+        }).join('');
+        ldHide();
+      },260);
+    }).catch(function(e){
+      ldHide();
+      box.innerHTML='<div class="empty">Google 请求失败：'+esc(e.message)+'<br>检查 Key / cx，或今日额度已用完</div>';
+    });
+}
+
+function esc(s){
+  return String(s==null?'':s).replace(/[&<>"']/g,function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+</script>
+<div id="ssoMask"><div class="sso-card">
+<div class="sso-ico">🔐</div>
+<h2>需要 EDGE 授权登录</h2>
+<p>聚合搜索已接入 EDGE 统一账号。<br>请通过主站授权后再使用，登录后搜索历史会自动云端同步。</p>
+<div class="sso-perm">
+<div><i>✓</i><span>读取你的 EDGE 身份（邮箱与 ID）</span></div>
+<div><i>✓</i><span>同步搜索历史到云端，换设备也能看到</span></div>
+</div>
+<button class="sso-btn" onclick="startSSO()">通过 EDGE 主站授权登录</button>
+<div class="sso-note">不会向本站透露你的密码 · 授权后可随时退出<br>主站：eclk0963.ccwu.cc</div>
+
+<div style="margin-top:16px">
+  <button type="button" id="ssoLoginToggle" onclick="searchToggleLogin()" style="width:100%;padding:11px;border:1px solid var(--line);background:#080c11;color:var(--cyan);border-radius:11px;font-weight:800;font-size:12.5px;cursor:pointer">或用邮箱验证码登录</button>
+  <div id="ssoLoginBox" style="display:none;margin-top:12px;text-align:left">
+    <div id="ssoStep1">
+      <input id="ssoEmail" type="email" maxlength="120" placeholder="输入邮箱，如 123456@qq.com" autocomplete="email" autocapitalize="none" spellcheck="false" onkeydown="if(event.key==='Enter')sendSearchOtp()" style="width:100%;padding:12px;border:1px solid var(--line);background:#0b1016;color:var(--text);border-radius:10px;font-size:13px;box-sizing:border-box">
+      <button type="button" onclick="sendSearchOtp()" style="width:100%;margin-top:8px;padding:12px;border:0;border-radius:10px;background:var(--green);color:#03130a;font-weight:900;font-size:13px;cursor:pointer">✉ 发送验证码</button>
+      <div id="hcapSlot" style="margin-top:10px"></div>
+      <div id="hcapTip" style="font-size:10.5px;color:var(--muted);margin-top:6px;display:none;line-height:1.6"></div>
+      <p style="font-size:10.5px;color:var(--muted);line-height:1.7;margin:9px 0 0">输入邮箱后点发送，去邮箱取 <b style="color:var(--cyan)">6 位安全码</b> 填在下一步，<b style="color:var(--cyan)">无需密码、无需点链接</b>。账号与主站互通。</p>
+    </div>
+    <div id="ssoStep2" style="display:none">
+      <p style="font-size:11.5px;color:var(--muted);line-height:1.8;margin:0 0 10px">安全码已发到 <b id="ssoTo" style="color:var(--text)"></b>，一次性有效</p>
+      <input id="ssoOtp" maxlength="6" inputmode="numeric" placeholder="000000" onkeydown="if(event.key==='Enter')verifySearchOtp()" style="width:100%;padding:12px;border:1px solid var(--line);background:#0b1016;color:var(--text);border-radius:10px;font-size:15px;letter-spacing:.32em;text-align:center;box-sizing:border-box">
+      <button type="button" onclick="verifySearchOtp()" style="width:100%;margin-top:8px;padding:12px;border:0;border-radius:10px;background:var(--green);color:#03130a;font-weight:900;font-size:13px;cursor:pointer">✓ 验证登录</button>
+      <div style="display:flex;gap:7px;margin-top:9px;flex-wrap:wrap">
+        <button type="button" onclick="sendSearchOtp(true)" style="flex:1;padding:9px;border:1px solid var(--line);background:#080c11;color:var(--muted);border-radius:9px;font-size:11.5px;cursor:pointer">↻ 重新发送</button>
+        <button type="button" onclick="searchBackToEmail()" style="flex:1;padding:9px;border:1px solid var(--line);background:#080c11;color:var(--muted);border-radius:9px;font-size:11.5px;cursor:pointer">← 换个邮箱</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div></div>
+</body>
+</html>
